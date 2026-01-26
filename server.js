@@ -21,6 +21,26 @@ app.listen(port, () => {
     console.log(`Server running on port ${port}`)
 });
 
+function requireAuth(req, res, next) {
+    const header = req.headers.authorization; // "Bearer <token>"
+    if (!header) return res.status(401).json({ error: "Missing Authorization header" });
+    const [type, token] = header.split(" ");
+    if (type !== "Bearer" || !token) {
+        return res.status(401).json({ error: "Invalid Authorization format" });
+    }
+    try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        req.user = payload;
+        next();
+    } catch {
+        return res.status(401).json({ error: "Invalid/Expired token" });
+    }
+}
+// Protect only ONE route for this demo
+app.post("/addcard", requireAuth, async (req, res) => {
+// existing addcard logic (same as before)
+});
+
 app.get('/allcards', async (req, res) => {
     try {
         let connections = await mysql.createConnection(dbConfig);
