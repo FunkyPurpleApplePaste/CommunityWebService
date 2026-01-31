@@ -1,11 +1,9 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
-const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
 app.use(express.json());
 
 const dbConfig = {
@@ -24,8 +22,6 @@ if (process.env.DB_SSL === 'true') {
 }
 
 const pool = mysql.createPool(dbConfig);
-
-const DEMO_USER = { id: 1, username: "admin", password: "admin123" };
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_me";
 
 function requireAuth(req, res, next) {
@@ -42,19 +38,32 @@ function requireAuth(req, res, next) {
   }
 }
 
-app.post("/login", (req, res) => {
+app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  if (username !== DEMO_USER.username || password !== DEMO_USER.password) {
-    return res.status(401).json({ error: "Invalid credentials" });
+  if (!username || !password)
+    return res.status(400).json({ error: "Missing credentials" });
+
+  try {
+    const [rows] = await pool.query(
+      "SELECT * FROM users WHERE username = ? AND password_hash = SHA2(?, 256)",
+      [username, password]
+    );
+
+    if (rows.length === 0)
+      return res.status(401).json({ error: "Invalid credentials" });
+
+    const user = rows[0];
+    const token = jwt.sign(
+      { userId: user.id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ token });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Server error" });
   }
-
-  const token = jwt.sign(
-    { userId: DEMO_USER.id, username: DEMO_USER.username },
-    JWT_SECRET,
-    { expiresIn: "1h" }
-  );
-
-  res.json({ token });
 });
 
 app.get("/community", async (req, res) => {
@@ -80,9 +89,8 @@ app.get("/community/:id", async (req, res) => {
 
 app.post("/community", requireAuth, async (req, res) => {
   const { card_name, card_pic, description, status } = req.body;
-  if (!card_name || !description) {
+  if (!card_name || !description)
     return res.status(400).json({ error: "Missing required fields" });
-  }
 
   try {
     const [result] = await pool.execute(
