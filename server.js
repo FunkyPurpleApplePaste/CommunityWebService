@@ -1,6 +1,5 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
-const cors = require('cors');
 require('dotenv').config();
 
 const dbConfig = {
@@ -21,7 +20,6 @@ if (process.env.DB_SSL === 'true') {
 const pool = mysql.createPool(dbConfig);
 
 const app = express();
-app.use(cors());
 app.use(express.json());
 
 app.get('/community', async (req, res) => {
