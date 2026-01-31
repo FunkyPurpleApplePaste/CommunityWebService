@@ -1,93 +1,93 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
+const cors = require('cors');
 require('dotenv').config();
-const port = 3000;
 
 const dbConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port:  process.env.DB_PORT,
-    waitForConnections: true,
-    connectionLimit: 100,
-    queueLimit: 0,
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: Number(process.env.DB_PORT) || 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+};
+
+if (process.env.DB_SSL === 'true') {
+  dbConfig.ssl = { rejectUnauthorized: false };
 }
+
+const pool = mysql.createPool(dbConfig);
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`)
+app.get('/community', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM community ORDER BY id DESC');
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-function requireAuth(req, res, next) {
-    const header = req.headers.authorization; // "Bearer <token>"
-    if (!header) return res.status(401).json({ error: "Missing Authorization header" });
-    const [type, token] = header.split(" ");
-    if (type !== "Bearer" || !token) {
-        return res.status(401).json({ error: "Invalid Authorization format" });
-    }
-    try {
-        const payload = jwt.verify(token, JWT_SECRET);
-        req.user = payload;
-        next();
-    } catch {
-        return res.status(401).json({ error: "Invalid/Expired token" });
-    }
-}
-// Protect only ONE route for this demo
-app.post("/addcard", requireAuth, async (req, res) => {
-// existing addcard logic (same as before)
+app.get('/community/:id', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM community WHERE id = ?', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.get('/allcards', async (req, res) => {
-    try {
-        let connections = await mysql.createConnection(dbConfig);
-        const [rows] = await connections.execute('SELECT * FROM defaultdb.cards');
-        res.json(rows);
-    } catch {
-        console.error(err);
-        res.status(500).json({message:'Server error for allcards'});
-    }
+app.post('/community', async (req, res) => {
+  const { card_name, card_pic, description, status } = req.body;
+  if (!card_name || !description) return res.status(400).json({ error: 'Missing required fields' });
+  try {
+    const [result] = await pool.execute(
+      'INSERT INTO community (card_name, card_pic, description, status) VALUES (?,?,?,?)',
+      [card_name, card_pic || null, description, status || 'Open']
+    );
+    const insertId = result.insertId;
+    const [rows] = await pool.query('SELECT * FROM community WHERE id = ?', [insertId]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.post('/addcard', async (req, res) => {
-    const { card_name , card_pic } = req.body;
-    try {
-        let connection = await mysql.createConnection(dbConfig);
-        await connection.execute('INSERT INTO cards (card_name, card_pic) VALUES (?,?)', [card_name, card_pic]);
-        res.status(201).json({message:'Cards '+card_name+' added successfully.'});
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({message: 'Server error - could not add card' + card_name});
-    }
-})
-
-// Example Route: Update a card
-app.put('/updatecard/:id', async (req, res) => {
-    const { id } = req.params;
-    const { card_name, card_pic } = req.body;
-    try{
-        let connection = await mysql.createConnection(dbConfig);
-        await connection.execute('UPDATE cards SET card_name=?, card_pic=? WHERE id=?', [card_name, card_pic, id]);
-        res.status(201).json({ message: 'Card ' + id + ' updated successfully!' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error - could not update card ' + id });
-    }
+app.put('/community/:id', async (req, res) => {
+  const { card_name, card_pic, description, status } = req.body;
+  try {
+    const [result] = await pool.execute(
+      'UPDATE community SET card_name = ?, card_pic = ?, description = ?, status = ? WHERE id = ?',
+      [card_name, card_pic || null, description || null, status || 'Open', req.params.id]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Not found' });
+    const [rows] = await pool.query('SELECT * FROM community WHERE id = ?', [req.params.id]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-// Example Route: Delete a card
-app.delete('/deletecard/:id', async (req, res) => {
-    const { id } = req.params;
-    try{
-        let connection = await mysql.createConnection(dbConfig);
-        await connection.execute('DELETE FROM cards WHERE id=?', [id]);
-        res.status(201).json({ message: 'Card ' + id + ' deleted successfully!' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error - could not delete card ' + id });
-    }
+app.delete('/community/:id', async (req, res) => {
+  try {
+    const [result] = await pool.execute('DELETE FROM community WHERE id = ?', [req.params.id]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
