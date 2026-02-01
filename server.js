@@ -85,36 +85,70 @@ app.get("/community/:id", async (req, res) => {
 });
 
 app.post("/community", requireAuth, async (req, res) => {
-  const { card_name, card_pic, description, status, contact_info, location, deadline, category, priority } = req.body;
+  const {
+    card_name,
+    card_pic,
+    description,
+    status,
+    contact_info,
+    location,
+    deadline,
+    category,
+    priority,
+  } = req.body;
+
   if (!card_name || !description) return res.status(400).json({ error: "Missing required fields" });
+
   try {
     const deadlineVal = deadline ? new Date(deadline) : null;
+    const statusVal = status || "Open";
+    const categoryVal = category || "General";
+    const priorityVal = priority || "Medium";
+
     const [result] = await pool.execute(
       "INSERT INTO community (card_name, card_pic, description, status, contact_info, location, deadline, category, priority) VALUES (?,?,?,?,?,?,?,?,?)",
-      [card_name, card_pic || null, description, status || "Open", contact_info || null, location || null, deadlineVal, category || null, priority || "Medium"]
+      [card_name, card_pic, description, statusVal, contact_info, location, deadlineVal, categoryVal, priorityVal]
     );
+
     const insertId = result.insertId;
     const [rows] = await pool.query("SELECT * FROM community WHERE id = ?", [insertId]);
     res.status(201).json(rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("POST /community error:", err, "body:", req.body);
     res.status(500).json({ error: "Server error" });
   }
 });
 
 app.put("/community/:id", requireAuth, async (req, res) => {
-  const { card_name, card_pic, description, status, contact_info, location, deadline, category, priority } = req.body;
+  const {
+    card_name,
+    card_pic,
+    description,
+    status,
+    contact_info,
+    location,
+    deadline,
+    category,
+    priority,
+  } = req.body;
+
   try {
     const deadlineVal = deadline ? new Date(deadline) : null;
+    const statusVal = status || "Open";
+    const categoryVal = category || "General";
+    const priorityVal = priority || "Medium";
+
     const [result] = await pool.execute(
       "UPDATE community SET card_name = ?, card_pic = ?, description = ?, status = ?, contact_info = ?, location = ?, deadline = ?, category = ?, priority = ? WHERE id = ?",
-      [card_name, card_pic || null, description || null, status || "Open", contact_info || null, location || null, deadlineVal, category || null, priority || "Medium", req.params.id]
+      [card_name, card_pic, description, statusVal, contact_info, location, deadlineVal, categoryVal, priorityVal, req.params.id]
     );
+
     if (result.affectedRows === 0) return res.status(404).json({ error: "Not found" });
+
     const [rows] = await pool.query("SELECT * FROM community WHERE id = ?", [req.params.id]);
     res.json(rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("PUT /community/:id error:", err, "body:", req.body);
     res.status(500).json({ error: "Server error" });
   }
 });
