@@ -42,25 +42,20 @@ function requireAuth(req, res, next) {
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "Missing credentials" });
-
   try {
     const [rows] = await pool.query(
       "SELECT * FROM users WHERE username = ? AND password_hash = SHA2(?, 256)",
       [username, password]
     );
-
     if (rows.length > 0) {
       const user = rows[0];
       const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: "1h" });
       return res.json({ token });
     }
-
-    // fallback demo login for quick testing (admin/admin123)
     if (username === "admin" && password === "admin123") {
       const token = jwt.sign({ userId: 0, username: "admin" }, JWT_SECRET, { expiresIn: "1h" });
       return res.json({ token });
     }
-
     return res.status(401).json({ error: "Invalid credentials" });
   } catch (err) {
     console.error("Login error:", err);
@@ -90,12 +85,13 @@ app.get("/community/:id", async (req, res) => {
 });
 
 app.post("/community", requireAuth, async (req, res) => {
-  const { card_name, card_pic, description, status } = req.body;
+  const { card_name, card_pic, description, status, contact_info, location, deadline, category, priority } = req.body;
   if (!card_name || !description) return res.status(400).json({ error: "Missing required fields" });
   try {
+    const deadlineVal = deadline ? new Date(deadline) : null;
     const [result] = await pool.execute(
-      "INSERT INTO community (card_name, card_pic, description, status) VALUES (?,?,?,?)",
-      [card_name, card_pic || null, description, status || "Open"]
+      "INSERT INTO community (card_name, card_pic, description, status, contact_info, location, deadline, category, priority) VALUES (?,?,?,?,?,?,?,?,?)",
+      [card_name, card_pic || null, description, status || "Open", contact_info || null, location || null, deadlineVal, category || null, priority || "Medium"]
     );
     const insertId = result.insertId;
     const [rows] = await pool.query("SELECT * FROM community WHERE id = ?", [insertId]);
@@ -106,12 +102,13 @@ app.post("/community", requireAuth, async (req, res) => {
   }
 });
 
-app.put("/community/:id", async (req, res) => {
-  const { card_name, card_pic, description, status } = req.body;
+app.put("/community/:id", requireAuth, async (req, res) => {
+  const { card_name, card_pic, description, status, contact_info, location, deadline, category, priority } = req.body;
   try {
+    const deadlineVal = deadline ? new Date(deadline) : null;
     const [result] = await pool.execute(
-      "UPDATE community SET card_name = ?, card_pic = ?, description = ?, status = ? WHERE id = ?",
-      [card_name, card_pic || null, description || null, status || "Open", req.params.id]
+      "UPDATE community SET card_name = ?, card_pic = ?, description = ?, status = ?, contact_info = ?, location = ?, deadline = ?, category = ?, priority = ? WHERE id = ?",
+      [card_name, card_pic || null, description || null, status || "Open", contact_info || null, location || null, deadlineVal, category || null, priority || "Medium", req.params.id]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: "Not found" });
     const [rows] = await pool.query("SELECT * FROM community WHERE id = ?", [req.params.id]);
@@ -122,7 +119,7 @@ app.put("/community/:id", async (req, res) => {
   }
 });
 
-app.delete("/community/:id", async (req, res) => {
+app.delete("/community/:id", requireAuth, async (req, res) => {
   try {
     const [result] = await pool.execute("DELETE FROM community WHERE id = ?", [req.params.id]);
     if (result.affectedRows === 0) return res.status(404).json({ error: "Not found" });
