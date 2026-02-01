@@ -43,10 +43,7 @@ app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "Missing credentials" });
   try {
-    const [rows] = await pool.query(
-      "SELECT * FROM users WHERE username = ? AND password_hash = SHA2(?, 256)",
-      [username, password]
-    );
+    const [rows] = await pool.query("SELECT * FROM users WHERE username = ? AND password_hash = SHA2(?, 256)", [username, password]);
     if (rows.length > 0) {
       const user = rows[0];
       const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: "1h" });
@@ -101,9 +98,9 @@ app.post("/community", requireAuth, async (req, res) => {
 
   try {
     const deadlineVal = deadline ? new Date(deadline) : null;
-    const statusVal = status || "Open";
-    const categoryVal = category || "General";
-    const priorityVal = priority || "Medium";
+    const statusVal = status !== undefined ? status : "Open";
+    const categoryVal = category !== undefined ? category : "General";
+    const priorityVal = priority !== undefined ? priority : "Medium";
 
     const [result] = await pool.execute(
       "INSERT INTO community (card_name, card_pic, description, status, contact_info, location, deadline, category, priority) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -134,9 +131,9 @@ app.put("/community/:id", requireAuth, async (req, res) => {
 
   try {
     const deadlineVal = deadline ? new Date(deadline) : null;
-    const statusVal = status || "Open";
-    const categoryVal = category || "General";
-    const priorityVal = priority || "Medium";
+    const statusVal = status !== undefined ? status : "Open";
+    const categoryVal = category !== undefined ? category : "General";
+    const priorityVal = priority !== undefined ? priority : "Medium";
 
     const [result] = await pool.execute(
       "UPDATE community SET card_name = ?, card_pic = ?, description = ?, status = ?, contact_info = ?, location = ?, deadline = ?, category = ?, priority = ? WHERE id = ?",
